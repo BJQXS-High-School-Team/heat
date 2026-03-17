@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "site_id": "site-a",
+  "gateway_id": "gateway-s3-001",
+  "device_id": "wearable-c3-001",
+  "status": {
+    "local_state": "warning",
+    "effective_state": "danger",
+    "alarm_active": true
+  },
+  "freshness": {
+    "online": true,
+    "last_seen_ms_ago": 850
+  }
+}

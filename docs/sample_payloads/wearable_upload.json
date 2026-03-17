@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "device_id": "wearable-c3-001",
+  "device_type": "wearable",
+  "seq": 123,
+  "device_uptime_ms": 456789,
+  "gps": {
+    "lat": 39.123456,
+    "lng": 116.123456,
+    "has_fix": true,
+    "satellites": 6
+  },
+  "physiology": {
+    "body_temp_c": 36.8,
+    "heart_rate_bpm": 92,
+    "spo2_pct": 97
+  },
+  "motion": {
+    "activity_score": 0.42,
+    "activity_level": "low"
+  },
+  "status": {
+    "local_state": "normal",
+    "effective_state": "normal",
+    "alarm_active": false
+  },
+  "sensor_health": {
+    "gps_ok": true,
+    "temp_ok": true,
+    "max30102_ok": true,
+    "imu_ok": true,
+    "oled_ok": true
+  },
+  "network": {
+    "rssi": -58
+  }
+}
