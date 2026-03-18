@@ -11,7 +11,7 @@
   "health": {
     "wifi_connected": true,
     "mqtt_connected": true,
-    "sht45_ok": true,
+    "sht35_ok": true,
     "bh1750_ok": true
   }
 }

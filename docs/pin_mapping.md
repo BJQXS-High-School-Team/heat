@@ -14,7 +14,7 @@
 
 ## ESP32-S3 Gateway
 
-- I2C SDA: `GPIO8`（SHT45 + BH1750）
+- I2C SDA: `GPIO8`（SHT35 + BH1750）
 - I2C SCL: `GPIO9`
 
 ## Wiring Notes

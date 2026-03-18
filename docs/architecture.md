@@ -22,7 +22,7 @@
   - 本地报警（震动+蜂鸣器）与OLED显示
   - HTTP JSON上报到S3
 - S3:
-  - 采集网关环境（SHT45/BH1750）
+  - 采集网关环境（SHT35/BH1750）
   - 接收可穿戴上报，维护设备快照
   - 提供本地Dashboard/API
   - 将网关+可穿戴数据桥接到云端MQTT
@@ -30,7 +30,7 @@
 
 ## 4. Ambient Data Limitation
 
-SHT45/BH1750 接在 S3 网关侧，数据必须标注为 `gateway_ambient`，不得误标为 wearable ambient。
+SHT35/BH1750 接在 S3 网关侧，数据必须标注为 `gateway_ambient`，不得误标为 wearable ambient。
 
 ## 5. Risk Logic Strategy
 

@@ -2,7 +2,7 @@
 
 namespace heatrisk::jsonkeys {
 
-// 通用字段
+// Common fields
 static constexpr const char* kSchemaVersion = "schema_version";
 static constexpr const char* kDeviceId = "device_id";
 static constexpr const char* kDeviceType = "device_type";
@@ -14,7 +14,7 @@ static constexpr const char* kSiteId = "site_id";
 static constexpr const char* kGatewayId = "gateway_id";
 static constexpr const char* kOk = "ok";
 
-// 分组对象
+// Nested objects
 static constexpr const char* kGps = "gps";
 static constexpr const char* kPhysiology = "physiology";
 static constexpr const char* kMotion = "motion";
@@ -31,35 +31,35 @@ static constexpr const char* kLng = "lng";
 static constexpr const char* kHasFix = "has_fix";
 static constexpr const char* kSatellites = "satellites";
 
-// 生理
+// Physiology
 static constexpr const char* kBodyTempC = "body_temp_c";
 static constexpr const char* kHeartRateBpm = "heart_rate_bpm";
 static constexpr const char* kSpo2Pct = "spo2_pct";
 
-// 运动
+// Motion
 static constexpr const char* kActivityScore = "activity_score";
 static constexpr const char* kActivityLevel = "activity_level";
 
-// 状态
+// Status
 static constexpr const char* kLocalState = "local_state";
 static constexpr const char* kEffectiveState = "effective_state";
 static constexpr const char* kAlarmActive = "alarm_active";
 
-// 健康标志
+// Sensor health
 static constexpr const char* kGpsOk = "gps_ok";
 static constexpr const char* kTempOk = "temp_ok";
 static constexpr const char* kMax30102Ok = "max30102_ok";
 static constexpr const char* kImuOk = "imu_ok";
 static constexpr const char* kOledOk = "oled_ok";
-static constexpr const char* kSht45Ok = "sht45_ok";
+static constexpr const char* kSht35Ok = "sht35_ok";
 static constexpr const char* kBh1750Ok = "bh1750_ok";
 
-// 网络
+// Network
 static constexpr const char* kRssi = "rssi";
 static constexpr const char* kWifiConnected = "wifi_connected";
 static constexpr const char* kMqttConnected = "mqtt_connected";
 
-// 命令
+// Command
 static constexpr const char* kTargetDeviceId = "target_device_id";
 static constexpr const char* kEnabled = "enabled";
 static constexpr const char* kState = "state";
@@ -68,7 +68,7 @@ static constexpr const char* kVibrate = "vibrate";
 static constexpr const char* kBuzzer = "buzzer";
 static constexpr const char* kExpiresInS = "expires_in_s";
 
-// 网关环境
+// Gateway ambient
 static constexpr const char* kTemperatureC = "temperature_c";
 static constexpr const char* kHumidityPct = "humidity_pct";
 static constexpr const char* kLightLux = "light_lux";
