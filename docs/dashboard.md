@@ -40,4 +40,4 @@
 
 ## Important Label Requirement
 
-所有 SHT45/BH1750 数据均使用 `Gateway Ambient` 标题，不得显示为 wearable ambient。
+所有 SHT35/BH1750 数据均使用 `Gateway Ambient` 标题，不得显示为 wearable ambient。

@@ -16,7 +16,7 @@
 ## Runtime: Gateway S3
 
 - Wi-Fi连接成功日志
-- SHT45/BH1750初始化与采样日志
+- SHT35/BH1750初始化与采样日志
 - `/api/wearable/upload`接收日志
 - MQTT连接/断开/重连日志
 - command接收/校验/缓存/过期日志

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -64,7 +64,7 @@ struct SensorHealth {
   bool max30102_ok = false;
   bool imu_ok = false;
   bool oled_ok = false;
-  bool sht45_ok = false;
+  bool sht35_ok = false;
   bool bh1750_ok = false;
 };
 
@@ -118,7 +118,7 @@ struct OverrideCommand {
   bool vibrate = false;
   bool buzzer = false;
   uint32_t expires_in_s = 0;
-  uint32_t issued_at_ms = 0;  // 使用S3本地millis时间基准
+  uint32_t issued_at_ms = 0;  // 使用 S3 本地 millis 作为下发时间基准
 };
 
 struct LocalThresholds {
