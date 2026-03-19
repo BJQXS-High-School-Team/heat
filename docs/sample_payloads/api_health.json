@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "uptime_ms": 245001,
+  "wifi_connected": true,
+  "mqtt_connected": true,
+  "heap_free": 239840,
+  "device_count": 2
+}

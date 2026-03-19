@@ -1,6 +1,6 @@
-# MQTT Topics
+﻿# MQTT Topics
 
-## Topic Templates
+## Topic 模板
 
 - `heatrisk/site/{site_id}/gateway/{gateway_id}/telemetry`
 - `heatrisk/site/{site_id}/wearable/{device_id}/telemetry`
@@ -8,13 +8,15 @@
 - `heatrisk/site/{site_id}/command/all`
 - `heatrisk/site/{site_id}/command/{device_id}`
 
-## QoS / Retain (建议)
+## 建议 QoS
 
-- telemetry: QoS 0, retain false
-- status: QoS 1, retain true（可选）
-- command: QoS 1, retain false
+- gateway/wearable telemetry: QoS 0
+- wearable status: QoS 0 或 QoS 1（视平台需要）
+- command: QoS 1
 
-## Command Payload (schema_version = 1)
+## Command Payload（schema_version = 1）
+
+参考：`docs/sample_payloads/command_override.json`
 
 ```json
 {
@@ -29,9 +31,15 @@
 }
 ```
 
-## Validation Rules
+## 校验规则
 
-- `state` must be one of: `normal|warning|danger`
-- `expires_in_s` must be `>= 0`
-- `target_device_id` 可为空仅当主题是 `command/all`
-- 命令生效前需要 schema/version/字段完整性校验
+- `state` 仅允许 `normal|warning|danger`
+- `expires_in_s >= 0`
+- `command/all`：可用 `target_device_id` 指定单设备，也可省略表示全局命令
+- `command/{device_id}`：topic 中设备号优先于 payload 中 `target_device_id`
+
+## TTL 行为
+
+- 命令进入 S3 缓存后按 `issued_at_ms + expires_in_s` 判定有效性
+- 过期命令不会继续下发给 C3
+- 当设备命令过期后，若全局命令仍有效，回退使用全局命令
