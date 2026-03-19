@@ -23,6 +23,19 @@ static constexpr const char* kMqttPassword = "mqtt_password";
 static constexpr uint32_t kMqttReconnectIntervalMs = 5000;
 static constexpr uint16_t kMqttPacketBufferSize = 1024;
 
+// ---------- Bemfa MQTT Compatibility ----------
+// When enabled:
+// 1) S3 uses bemfa private key as MQTT client id.
+// 2) Publish topics as <topic>/up.
+// 3) Subscribe command topic as <topic> and <topic>/set.
+// Topic naming should follow Bemfa requirements (letters+numbers).
+static constexpr bool kMqttUseBemfa = false;
+static constexpr const char* kBemfaClientId = "YOUR_BEMFA_PRIVATE_KEY";
+static constexpr const char* kBemfaTopicGateway = "heatriskgw004";
+static constexpr const char* kBemfaTopicWearableTelemetry = "heatriskwb004";
+static constexpr const char* kBemfaTopicWearableStatus = "heatriskst004";
+static constexpr const char* kBemfaTopicCommand = "heatriskcmd004";
+
 // ---------- Pin Mapping (ESP32-S3) ----------
 static constexpr uint8_t kPinI2cSda = 8;
 static constexpr uint8_t kPinI2cScl = 9;

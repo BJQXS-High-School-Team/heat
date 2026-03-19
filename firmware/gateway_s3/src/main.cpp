@@ -111,7 +111,13 @@ void setup() {
                       gateway_config::kMqttPassword,
                       gateway_config::kMqttReconnectIntervalMs,
                       gateway_config::kMqttPublishIntervalMs,
-                      gateway_config::kMqttPacketBufferSize);
+                      gateway_config::kMqttPacketBufferSize,
+                      gateway_config::kMqttUseBemfa,
+                      gateway_config::kBemfaClientId,
+                      gateway_config::kBemfaTopicGateway,
+                      gateway_config::kBemfaTopicWearableTelemetry,
+                      gateway_config::kBemfaTopicWearableStatus,
+                      gateway_config::kBemfaTopicCommand);
 }
 
 void loop() {

@@ -12,9 +12,9 @@ static constexpr const char* kDeviceType = "wearable";
 
 // ---------- Wi-Fi / Gateway ----------
 // TODO(Phase 2): 替换为真实网络信息
-static constexpr const char* kWifiSsid = "YOUR_WIFI_SSID";
-static constexpr const char* kWifiPassword = "YOUR_WIFI_PASSWORD";
-static constexpr const char* kGatewayHost = "192.168.1.50";
+static constexpr const char* kWifiSsid = "blackmi";
+static constexpr const char* kWifiPassword = "wxy358800";
+static constexpr const char* kGatewayHost = "172.20.10.1";
 static constexpr uint16_t kGatewayPort = 80;
 static constexpr const char* kUploadPath = "/api/wearable/upload";
 static constexpr uint32_t kWifiReconnectIntervalMs = 5000;

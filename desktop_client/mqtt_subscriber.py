@@ -39,6 +39,17 @@ class HeatRiskMqttClient:
             print(f"[desktop] MQTT connect failed: {reason_code}")
             return
         print("[desktop] MQTT connected")
+        if self._config.bemfa_mode:
+            client.subscribe(self._config.bemfa_topic_gateway, qos=0)
+            client.subscribe(self._config.bemfa_topic_wearable_telemetry, qos=0)
+            client.subscribe(self._config.bemfa_topic_wearable_status, qos=0)
+            client.subscribe(f"{self._config.bemfa_topic_gateway}/up", qos=0)
+            client.subscribe(
+                f"{self._config.bemfa_topic_wearable_telemetry}/up", qos=0
+            )
+            client.subscribe(f"{self._config.bemfa_topic_wearable_status}/up", qos=0)
+            return
+
         site = self._config.site_id
         client.subscribe(f"heatrisk/site/{site}/gateway/+/telemetry", qos=0)
         client.subscribe(f"heatrisk/site/{site}/wearable/+/telemetry", qos=0)
@@ -56,6 +67,35 @@ class HeatRiskMqttClient:
         try:
             payload = json.loads(payload_raw)
         except json.JSONDecodeError:
+            return
+
+        if self._config.bemfa_mode:
+            base_topic = topic.split("/", 1)[0]
+            with self._lock:
+                self._state.last_message_topic = topic
+                if base_topic == self._config.bemfa_topic_gateway:
+                    gateway_id = payload.get("gateway_id", "gateway")
+                    snap = self._state.gateways.get(gateway_id)
+                    if snap is None:
+                        snap = GatewaySnapshot(gateway_id=gateway_id)
+                        self._state.gateways[gateway_id] = snap
+                    snap.payload = payload
+                    return
+
+                if base_topic in {
+                    self._config.bemfa_topic_wearable_telemetry,
+                    self._config.bemfa_topic_wearable_status,
+                }:
+                    device_id = payload.get("device_id", "wearable-unknown")
+                    snap = self._state.wearables.get(device_id)
+                    if snap is None:
+                        snap = WearableSnapshot(device_id=device_id)
+                        self._state.wearables[device_id] = snap
+
+                    if base_topic == self._config.bemfa_topic_wearable_telemetry:
+                        snap.telemetry = payload
+                    else:
+                        snap.status = payload
             return
 
         parts = topic.split("/")
@@ -138,7 +178,9 @@ class HeatRiskMqttClient:
         buzzer: bool,
         expires_in_s: int,
     ) -> None:
-        if target_device_id:
+        if self._config.bemfa_mode:
+            topic = f"{self._config.bemfa_topic_command}/set"
+        elif target_device_id:
             topic = command_device_topic(self._config.site_id, target_device_id)
         else:
             topic = command_all_topic(self._config.site_id)

@@ -57,12 +57,28 @@ void MqttBridge::begin(const char* site_id, const char* gateway_id,
                        const char* mqtt_username, const char* mqtt_password,
                        uint32_t reconnect_interval_ms,
                        uint32_t publish_interval_ms,
-                       uint16_t packet_buffer_size) {
+                       uint16_t packet_buffer_size, bool bemfa_mode,
+                       const char* bemfa_client_id,
+                       const char* bemfa_topic_gateway,
+                       const char* bemfa_topic_wearable_telemetry,
+                       const char* bemfa_topic_wearable_status,
+                       const char* bemfa_topic_command) {
   CopySafe(site_id_, sizeof(site_id_), site_id);
   CopySafe(gateway_id_, sizeof(gateway_id_), gateway_id);
   CopySafe(mqtt_host_, sizeof(mqtt_host_), mqtt_host);
   CopySafe(mqtt_username_, sizeof(mqtt_username_), mqtt_username);
   CopySafe(mqtt_password_, sizeof(mqtt_password_), mqtt_password);
+  bemfa_mode_ = bemfa_mode;
+  CopySafe(bemfa_client_id_, sizeof(bemfa_client_id_), bemfa_client_id);
+  CopySafe(bemfa_topic_gateway_, sizeof(bemfa_topic_gateway_),
+           bemfa_topic_gateway);
+  CopySafe(bemfa_topic_wearable_telemetry_,
+           sizeof(bemfa_topic_wearable_telemetry_),
+           bemfa_topic_wearable_telemetry);
+  CopySafe(bemfa_topic_wearable_status_, sizeof(bemfa_topic_wearable_status_),
+           bemfa_topic_wearable_status);
+  CopySafe(bemfa_topic_command_, sizeof(bemfa_topic_command_),
+           bemfa_topic_command);
 
   mqtt_port_ = mqtt_port;
   reconnect_interval_ms_ = reconnect_interval_ms;
@@ -76,10 +92,16 @@ void MqttBridge::begin(const char* site_id, const char* gateway_id,
   mqtt_client_.setCallback(StaticOnMessage);
   s_instance_ = this;
 
-  BuildGatewayTelemetryTopic(gateway_topic_, sizeof(gateway_topic_), site_id_,
-                             gateway_id_);
-  snprintf(command_wildcard_topic_, sizeof(command_wildcard_topic_),
-           "heatrisk/site/%s/command/+", site_id_);
+  if (bemfa_mode_) {
+    CopySafe(gateway_topic_, sizeof(gateway_topic_), bemfa_topic_gateway_);
+    CopySafe(command_wildcard_topic_, sizeof(command_wildcard_topic_),
+             bemfa_topic_command_);
+  } else {
+    BuildGatewayTelemetryTopic(gateway_topic_, sizeof(gateway_topic_), site_id_,
+                               gateway_id_);
+    snprintf(command_wildcard_topic_, sizeof(command_wildcard_topic_),
+             "heatrisk/site/%s/command/+", site_id_);
+  }
 
   const uint32_t chip_id = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFFFF);
   snprintf(client_id_, sizeof(client_id_), "s3-%s-%08lx", gateway_id_,
@@ -87,6 +109,35 @@ void MqttBridge::begin(const char* site_id, const char* gateway_id,
 }
 
 bool MqttBridge::isConnected() { return mqtt_client_.connected(); }
+
+bool MqttBridge::BuildPublishTopic(const char* base_topic, bool use_set,
+                                   char* out, size_t out_size) const {
+  if (out == nullptr || out_size == 0 || base_topic == nullptr ||
+      base_topic[0] == '\0') {
+    return false;
+  }
+  if (!bemfa_mode_) {
+    CopySafe(out, out_size, base_topic);
+    return true;
+  }
+
+  const int n = snprintf(out, out_size, "%s/%s", base_topic,
+                         use_set ? "set" : "up");
+  return n > 0 && static_cast<size_t>(n) < out_size;
+}
+
+bool MqttBridge::IsBemfaCommandTopic(const char* topic) const {
+  if (!bemfa_mode_ || topic == nullptr || bemfa_topic_command_[0] == '\0') {
+    return false;
+  }
+  if (strcmp(topic, bemfa_topic_command_) == 0) {
+    return true;
+  }
+  char set_topic[96];
+  const int n =
+      snprintf(set_topic, sizeof(set_topic), "%s/set", bemfa_topic_command_);
+  return n > 0 && strcmp(topic, set_topic) == 0;
+}
 
 void MqttBridge::tryConnect(uint32_t now_ms) {
   if (mqtt_client_.connected()) {
@@ -101,7 +152,9 @@ void MqttBridge::tryConnect(uint32_t now_ms) {
   last_reconnect_attempt_ms_ = now_ms;
 
   bool ok = false;
-  if (mqtt_username_[0] != '\0') {
+  if (bemfa_mode_ && bemfa_client_id_[0] != '\0') {
+    ok = mqtt_client_.connect(bemfa_client_id_);
+  } else if (mqtt_username_[0] != '\0') {
     ok = mqtt_client_.connect(client_id_, mqtt_username_, mqtt_password_);
   } else {
     ok = mqtt_client_.connect(client_id_);
@@ -112,7 +165,15 @@ void MqttBridge::tryConnect(uint32_t now_ms) {
     return;
   }
 
-  const bool sub_ok = mqtt_client_.subscribe(command_wildcard_topic_, 1);
+  bool sub_ok = mqtt_client_.subscribe(command_wildcard_topic_, 1);
+  if (bemfa_mode_) {
+    char set_topic[96];
+    const int n = snprintf(set_topic, sizeof(set_topic), "%s/set",
+                           command_wildcard_topic_);
+    if (n > 0 && static_cast<size_t>(n) < sizeof(set_topic)) {
+      sub_ok = mqtt_client_.subscribe(set_topic, 1) && sub_ok;
+    }
+  }
   Serial.printf("[S3][MQTT] connected, subscribe=%d topic=%s\n", sub_ok,
                 command_wildcard_topic_);
 }
@@ -145,7 +206,12 @@ void MqttBridge::publishGatewayTelemetry() {
 
   String payload;
   serializeJson(doc, payload);
-  mqtt_client_.publish(gateway_topic_, payload.c_str(), false);
+  char publish_topic[96];
+  if (!BuildPublishTopic(gateway_topic_, false, publish_topic,
+                         sizeof(publish_topic))) {
+    return;
+  }
+  mqtt_client_.publish(publish_topic, payload.c_str(), false);
 }
 
 void MqttBridge::publishWearableTelemetryAndStatus(uint32_t now_ms) {
@@ -161,11 +227,20 @@ void MqttBridge::publishWearableTelemetryAndStatus(uint32_t now_ms) {
       continue;
     }
 
-    if (!BuildWearableTelemetryTopic(telemetry_topic, sizeof(telemetry_topic),
-                                     site_id_, record->device_id) ||
-        !BuildWearableStatusTopic(status_topic, sizeof(status_topic), site_id_,
-                                  record->device_id)) {
-      continue;
+    if (bemfa_mode_) {
+      CopySafe(telemetry_topic, sizeof(telemetry_topic),
+               bemfa_topic_wearable_telemetry_);
+      CopySafe(status_topic, sizeof(status_topic), bemfa_topic_wearable_status_);
+      if (telemetry_topic[0] == '\0' || status_topic[0] == '\0') {
+        continue;
+      }
+    } else {
+      if (!BuildWearableTelemetryTopic(telemetry_topic, sizeof(telemetry_topic),
+                                       site_id_, record->device_id) ||
+          !BuildWearableStatusTopic(status_topic, sizeof(status_topic), site_id_,
+                                    record->device_id)) {
+        continue;
+      }
     }
 
     StaticJsonDocument<1024> telemetry;
@@ -202,7 +277,12 @@ void MqttBridge::publishWearableTelemetryAndStatus(uint32_t now_ms) {
 
     String telemetry_payload;
     serializeJson(telemetry, telemetry_payload);
-    mqtt_client_.publish(telemetry_topic, telemetry_payload.c_str(), false);
+    char telemetry_publish_topic[96];
+    if (BuildPublishTopic(telemetry_topic, false, telemetry_publish_topic,
+                          sizeof(telemetry_publish_topic))) {
+      mqtt_client_.publish(telemetry_publish_topic, telemetry_payload.c_str(),
+                           false);
+    }
 
     StaticJsonDocument<512> status_doc;
     status_doc[jsonkeys::kSchemaVersion] = record->snapshot.schema_version;
@@ -220,7 +300,11 @@ void MqttBridge::publishWearableTelemetryAndStatus(uint32_t now_ms) {
 
     String status_payload;
     serializeJson(status_doc, status_payload);
-    mqtt_client_.publish(status_topic, status_payload.c_str(), false);
+    char status_publish_topic[96];
+    if (BuildPublishTopic(status_topic, false, status_publish_topic,
+                          sizeof(status_publish_topic))) {
+      mqtt_client_.publish(status_publish_topic, status_payload.c_str(), false);
+    }
   }
 }
 
@@ -270,6 +354,44 @@ void MqttBridge::onMessage(char* topic, uint8_t* payload, unsigned int length) {
 void MqttBridge::applyCommandPayload(const char* topic, const char* payload_json,
                                      uint32_t now_ms) {
   if (topic == nullptr || payload_json == nullptr) {
+    return;
+  }
+
+  if (bemfa_mode_ && IsBemfaCommandTopic(topic)) {
+    StaticJsonDocument<768> doc;
+    const DeserializationError err = deserializeJson(doc, payload_json);
+    if (err) {
+      Serial.println("[S3][MQTT] invalid bemfa command JSON");
+      return;
+    }
+
+    const char* state_str = doc[jsonkeys::kState] | "normal";
+    StateLevel state;
+    if (!ParseStateStrict(state_str, &state)) {
+      Serial.printf("[S3][MQTT] invalid state=%s\n", state_str);
+      return;
+    }
+
+    OverrideCommand cmd;
+    cmd.enabled = doc[jsonkeys::kEnabled] | false;
+    cmd.state = state;
+    cmd.vibrate = doc[jsonkeys::kVibrate] | false;
+    cmd.buzzer = doc[jsonkeys::kBuzzer] | false;
+    cmd.expires_in_s = doc[jsonkeys::kExpiresInS] | 0;
+    if (cmd.expires_in_s > 3600) {
+      cmd.expires_in_s = 3600;
+    }
+    cmd.issued_at_ms = now_ms;
+    CopySafe(cmd.reason, sizeof(cmd.reason), doc[jsonkeys::kReason] | "");
+
+    const char* target = doc[jsonkeys::kTargetDeviceId] | "";
+    if (target[0] != '\0') {
+      command_cache_->setForDevice(target, cmd, now_ms);
+      Serial.printf("[S3][MQTT] bemfa cmd set for %s\n", target);
+    } else {
+      command_cache_->setGlobal(cmd, now_ms);
+      Serial.println("[S3][MQTT] bemfa cmd set global");
+    }
     return;
   }
 
