@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <WiFi.h>
 #include <Wire.h>
 
 #include <cstring>
@@ -42,6 +43,152 @@ uint32_t g_last_display_ms = 0;
 uint32_t g_last_state_log_ms = 0;
 heatrisk::StateLevel g_last_logged_effective_state = heatrisk::StateLevel::kNormal;
 
+char g_cmd_buffer[192] = {0};
+size_t g_cmd_len = 0;
+uint32_t g_cmd_last_input_ms = 0;
+constexpr uint32_t kCmdAutoCommitMs = 1000;
+
+const char* WifiStatusToString(const wl_status_t status) {
+  switch (status) {
+    case WL_NO_SHIELD:
+      return "NO_SHIELD";
+    case WL_IDLE_STATUS:
+      return "IDLE";
+    case WL_NO_SSID_AVAIL:
+      return "NO_SSID";
+    case WL_SCAN_COMPLETED:
+      return "SCAN_COMPLETED";
+    case WL_CONNECTED:
+      return "CONNECTED";
+    case WL_CONNECT_FAILED:
+      return "CONNECT_FAILED";
+    case WL_CONNECTION_LOST:
+      return "CONNECTION_LOST";
+    case WL_DISCONNECTED:
+      return "DISCONNECTED";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+void PrintCommandHelp() {
+  Serial.println("[C3][CMD] help:");
+  Serial.println("[C3][CMD]   help | ?                    -> show help");
+  Serial.println("[C3][CMD]   wifistatus                  -> show Wi-Fi/discovery state");
+  Serial.println("[C3][CMD]   wifi_diag                   -> show detailed Wi-Fi diagnostics");
+  Serial.println("[C3][CMD]   setgw <ipv4>                -> set gateway ip manually");
+  Serial.println("[C3][CMD]   discover                    -> force immediate mDNS+UDP discovery");
+  Serial.println("[C3][CMD]   rediscover                  -> clear cached gateway ip and rediscover");
+  Serial.println("[C3][CMD] examples:");
+  Serial.println("[C3][CMD]   wifistatus");
+  Serial.println("[C3][CMD]   wifi_diag");
+  Serial.println("[C3][CMD]   setgw 192.168.43.1");
+  Serial.println("[C3][CMD]   discover");
+  Serial.println("[C3][CMD]   rediscover");
+  Serial.printf("[C3][CMD] configured_ssid=%s\n", wearable_config::kWifiSsid);
+  Serial.println(
+      "[C3][CMD] note: if your serial tool does not send Enter, command auto-commit after 1s.");
+}
+
+void PrintWifiStatusCommand() {
+  const wl_status_t status = WiFi.status();
+  const bool connected = (status == WL_CONNECTED);
+  const String ip = connected ? WiFi.localIP().toString() : String("0.0.0.0");
+  const int32_t rssi = connected ? WiFi.RSSI() : -127;
+  Serial.printf(
+      "[C3][CMD] wifistatus status=%s(%d) connected=%d ip=%s rssi=%ld cfg_ssid=%s gateway_ip=%s discovery_armed=%d\n",
+      WifiStatusToString(status), static_cast<int>(status), connected,
+      ip.c_str(), static_cast<long>(rssi), wearable_config::kWifiSsid,
+      g_network.currentGatewayIp(), g_network.isDiscoveryArmed());
+}
+
+void HandleSerialCommand(const char* line) {
+  if (line == nullptr || line[0] == '\0') {
+    return;
+  }
+
+  char local[192];
+  strncpy(local, line, sizeof(local) - 1);
+  local[sizeof(local) - 1] = '\0';
+  char* saveptr = nullptr;
+  char* cmd = strtok_r(local, " \t", &saveptr);
+  if (cmd == nullptr) {
+    return;
+  }
+
+  if (strcmp(cmd, "wifistatus") == 0) {
+    PrintWifiStatusCommand();
+    return;
+  }
+  if (strcmp(cmd, "wifi_diag") == 0) {
+    g_network.printWifiDiag();
+    return;
+  }
+  if (strcmp(cmd, "setgw") == 0) {
+    char* ip = strtok_r(nullptr, " \t", &saveptr);
+    if (ip == nullptr) {
+      Serial.println("[C3][CMD] usage: setgw <ipv4>");
+      return;
+    }
+    if (g_network.setManualGatewayIp(ip)) {
+      Serial.printf("[C3][CMD] setgw ok ip=%s\n", g_network.currentGatewayIp());
+    } else {
+      Serial.printf("[C3][CMD] setgw invalid ip=%s\n", ip);
+    }
+    return;
+  }
+  if (strcmp(cmd, "discover") == 0) {
+    g_network.triggerGatewayDiscovery(false);
+    return;
+  }
+  if (strcmp(cmd, "rediscover") == 0) {
+    g_network.triggerGatewayDiscovery(true);
+    return;
+  }
+  if (strcmp(cmd, "help") == 0 || strcmp(cmd, "?") == 0) {
+    PrintCommandHelp();
+    return;
+  }
+
+  Serial.printf("[C3][CMD] unknown command: %s\n", cmd);
+}
+
+void CommitCommandBuffer() {
+  if (g_cmd_len == 0) {
+    return;
+  }
+  g_cmd_buffer[g_cmd_len] = '\0';
+  Serial.printf("[C3][CMD] recv: %s\n", g_cmd_buffer);
+  HandleSerialCommand(g_cmd_buffer);
+  g_cmd_len = 0;
+}
+
+void TickSerialCommandInput() {
+  const uint32_t now_ms = millis();
+  while (Serial.available() > 0) {
+    const char c = static_cast<char>(Serial.read());
+    if (c == '\n' || c == '\r' || c == ';') {
+      CommitCommandBuffer();
+      continue;
+    }
+    if (c == 0x08 || c == 0x7F) {  // Backspace / DEL
+      if (g_cmd_len > 0) {
+        --g_cmd_len;
+      }
+      continue;
+    }
+    if (static_cast<uint8_t>(c) >= 32 && g_cmd_len < sizeof(g_cmd_buffer) - 1) {
+      g_cmd_buffer[g_cmd_len++] = c;
+      g_cmd_last_input_ms = now_ms;
+    }
+  }
+
+  // 某些串口工具不会发送换行，超时自动提交一条命令。
+  if (g_cmd_len > 0 && (now_ms - g_cmd_last_input_ms) >= kCmdAutoCommitMs) {
+    CommitCommandBuffer();
+  }
+}
+
 void LogStateTransitionIfNeeded(uint32_t now_ms) {
   if (g_decision.status.effective_state == g_last_logged_effective_state &&
       (now_ms - g_last_state_log_ms) < 5000) {
@@ -68,9 +215,11 @@ void InitSnapshotBase() {
 
 void SetupSensors() {
   const bool temp_ok = g_temp_sensor.begin();
-  const bool gps_ok = g_gps_sensor.begin();
+  const bool gps_ok = wearable_config::kEnableGps ? g_gps_sensor.begin() : false;
   const bool imu_ok = g_imu_sensor.begin(&Wire);
-  const bool max_ok = g_max30102_sensor.begin(&Wire);
+  const bool max_ok = wearable_config::kEnableMax3010x
+                          ? g_max30102_sensor.begin(&Wire)
+                          : false;
   const bool oled_ok = g_display.begin(wearable_config::kOledI2cAddr);
 
   g_snapshot.sensor_health.temp_ok = temp_ok;
@@ -79,14 +228,22 @@ void SetupSensors() {
   g_snapshot.sensor_health.max30102_ok = max_ok;
   g_snapshot.sensor_health.oled_ok = oled_ok;
 
-  Serial.printf("[C3][INIT] temp=%d gps=%d imu=%d max30102=%d oled=%d\n", temp_ok,
-                gps_ok, imu_ok, max_ok, oled_ok);
+  Serial.printf(
+      "[C3][INIT] temp=%d gps=%d imu=%d max3010x=%d oled=%d gps_en=%d "
+      "max3010x_en=%d\n",
+      temp_ok, gps_ok, imu_ok, max_ok, oled_ok, wearable_config::kEnableGps,
+      wearable_config::kEnableMax3010x);
 }
 
 void SetupNetwork() {
   g_network.begin(wearable_config::kWifiSsid, wearable_config::kWifiPassword,
-                  wearable_config::kGatewayHost, wearable_config::kGatewayPort,
+                  wearable_config::kGatewayPort,
                   wearable_config::kUploadPath,
+                  wearable_config::kGatewayMdnsHost,
+                  wearable_config::kGatewayDiscoveryPort,
+                  wearable_config::kGatewayDiscoveryListenPort,
+                  wearable_config::kGatewayDiscoveryMagic,
+                  wearable_config::kGatewayDiscoveryIntervalMs,
                   wearable_config::kWifiReconnectIntervalMs,
                   wearable_config::kHttpConnectTimeoutMs,
                   wearable_config::kHttpReadTimeoutMs);
@@ -103,14 +260,24 @@ void TickSample(uint32_t now_ms) {
   g_snapshot.physiology.body_temp_c = body_temp;
   g_snapshot.sensor_health.temp_ok = g_temp_sensor.isHealthy();
 
-  g_gps_sensor.sample(&g_snapshot.gps);
-  g_snapshot.sensor_health.gps_ok = g_gps_sensor.isHealthy();
+  if (wearable_config::kEnableGps) {
+    g_gps_sensor.sample(&g_snapshot.gps);
+    g_snapshot.sensor_health.gps_ok = g_gps_sensor.isHealthy();
+  } else {
+    g_snapshot.gps.has_fix = false;
+    g_snapshot.gps.satellites = 0;
+    g_snapshot.sensor_health.gps_ok = false;
+  }
 
   g_imu_sensor.sample(&g_snapshot.motion);
   g_snapshot.sensor_health.imu_ok = g_imu_sensor.isHealthy();
 
-  g_max30102_sensor.sample(&g_snapshot.physiology);
-  g_snapshot.sensor_health.max30102_ok = g_max30102_sensor.isHealthy();
+  if (wearable_config::kEnableMax3010x) {
+    g_max30102_sensor.sample(&g_snapshot.physiology);
+    g_snapshot.sensor_health.max30102_ok = g_max30102_sensor.isHealthy();
+  } else {
+    g_snapshot.sensor_health.max30102_ok = false;
+  }
 
   g_snapshot.network.wifi_connected = g_network.isWifiConnected();
   g_snapshot.network.rssi = g_network.currentRssi();
@@ -160,16 +327,24 @@ void TickUpload(uint32_t now_ms) {
       g_network.uploadTelemetry(g_snapshot, &incoming_override);
 
   if (!result.request_sent) {
-    Serial.println("[C3][HTTP] skipped upload (wifi disconnected)");
+    if (!g_network.isWifiConnected()) {
+      Serial.println("[C3][TCP] skipped upload (wifi disconnected)");
+    } else if (!g_network.isWifiReadyForUplink(now_ms)) {
+      Serial.println("[C3][TCP] skipped upload (wifi settling)");
+    } else if (!g_network.hasGatewayEndpoint()) {
+      Serial.println("[C3][TCP] skipped upload (gateway not discovered yet)");
+    } else {
+      Serial.println("[C3][TCP] skipped upload");
+    }
     return;
   }
 
   if (!result.http_ok) {
-    Serial.printf("[C3][HTTP] upload failed, status=%d\n", result.http_status);
+    Serial.printf("[C3][TCP] upload failed, status=%d\n", result.http_status);
     return;
   }
 
-  Serial.printf("[C3][HTTP] upload ok, status=%d\n", result.http_status);
+  Serial.printf("[C3][TCP] upload ok, status=%d\n", result.http_status);
   if (result.response_parsed) {
     g_override = incoming_override;
     Serial.printf("[C3][OVERRIDE] enabled=%d state=%s vibrate=%d buzzer=%d ttl=%lu reason=%s\n",
@@ -186,6 +361,10 @@ void setup() {
   Serial.begin(115200);
   delay(120);
   Serial.println("[C3] boot");
+  Serial.printf("[C3][CFG] wifi use code config ssid=%s\n",
+                wearable_config::kWifiSsid);
+  Serial.println("[C3][DISCOVERY] auto mode enabled");
+  PrintCommandHelp();
 
   Wire.begin(wearable_config::kPinI2cSda, wearable_config::kPinI2cScl,
              wearable_config::kI2cFrequencyHz);
@@ -198,7 +377,11 @@ void setup() {
 void loop() {
   const uint32_t now_ms = millis();
 
-  g_gps_sensor.poll();
+  TickSerialCommandInput();
+
+  if (wearable_config::kEnableGps) {
+    g_gps_sensor.poll();
+  }
   g_network.tick(now_ms);
   g_alarm.tick(now_ms);
 

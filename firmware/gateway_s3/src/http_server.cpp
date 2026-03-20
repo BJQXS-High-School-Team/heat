@@ -259,6 +259,7 @@ bool GatewayHttpServer::parseWearablePayload(const String& body,
 
 void GatewayHttpServer::handleWearableUpload() {
   if (!server_.hasArg("plain")) {
+    Serial.println("[S3][HTTP] upload missing_body");
     server_.send(400, "application/json", "{\"ok\":false,\"error\":\"missing_body\"}");
     return;
   }
@@ -266,6 +267,8 @@ void GatewayHttpServer::handleWearableUpload() {
   WearableTelemetrySnapshot snapshot;
   String parse_error;
   if (!parseWearablePayload(server_.arg("plain"), &snapshot, &parse_error)) {
+    Serial.printf("[S3][HTTP] upload parse_error=%s len=%u\n", parse_error.c_str(),
+                  static_cast<unsigned>(server_.arg("plain").length()));
     StaticJsonDocument<256> err_doc;
     err_doc[jsonkeys::kOk] = false;
     err_doc["error"] = parse_error;
@@ -278,6 +281,7 @@ void GatewayHttpServer::handleWearableUpload() {
   const uint32_t now_ms = millis();
   const bool upsert_ok = registry_->upsert(snapshot, now_ms);
   if (!upsert_ok) {
+    Serial.printf("[S3][HTTP] upload registry_full device=%s\n", snapshot.device_id);
     server_.send(503, "application/json",
                  "{\"ok\":false,\"error\":\"registry_full\"}");
     return;
@@ -300,6 +304,9 @@ void GatewayHttpServer::handleWearableUpload() {
 
   String out;
   serializeJson(resp, out);
+  Serial.printf("[S3][HTTP] upload ok device=%s seq=%lu state=%s\n", snapshot.device_id,
+                static_cast<unsigned long>(snapshot.seq),
+                StateLevelToString(snapshot.status.local_state));
   server_.send(200, "application/json", out);
 }
 

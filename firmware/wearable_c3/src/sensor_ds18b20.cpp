@@ -1,5 +1,7 @@
 #include "sensor_ds18b20.h"
 
+#include <Arduino.h>
+
 namespace heatrisk {
 
 Ds18b20Sensor::Ds18b20Sensor(uint8_t pin)
@@ -7,7 +9,10 @@ Ds18b20Sensor::Ds18b20Sensor(uint8_t pin)
 
 bool Ds18b20Sensor::begin() {
   sensor_.begin();
-  sensor_.setWaitForConversion(true);
+  sensor_.setWaitForConversion(false);
+  sensor_.requestTemperatures();
+  conversion_in_flight_ = true;
+  conversion_start_ms_ = millis();
   return true;
 }
 
@@ -16,18 +21,33 @@ bool Ds18b20Sensor::sample(float* out_temp_c) {
     return false;
   }
 
-  sensor_.requestTemperatures();
-  const float temp_c = sensor_.getTempCByIndex(0);
-  const bool valid = (temp_c != DEVICE_DISCONNECTED_C) && (temp_c > -40.0f) &&
-                     (temp_c < 85.0f);
+  const uint32_t now_ms = millis();
+  bool has_new_value = false;
 
-  if (valid) {
-    last_temp_c_ = temp_c;
+  if (conversion_in_flight_ &&
+      (now_ms - conversion_start_ms_ >= kConversionWaitMs)) {
+    const float temp_c = sensor_.getTempCByIndex(0);
+    const bool valid = (temp_c != DEVICE_DISCONNECTED_C) && (temp_c > -40.0f) &&
+                       (temp_c < 85.0f);
+    if (valid) {
+      last_temp_c_ = temp_c;
+      healthy_ = true;
+      has_new_value = true;
+    } else {
+      healthy_ = false;
+    }
+
+    sensor_.requestTemperatures();
+    conversion_start_ms_ = now_ms;
+    conversion_in_flight_ = true;
+  } else if (!conversion_in_flight_) {
+    sensor_.requestTemperatures();
+    conversion_start_ms_ = now_ms;
+    conversion_in_flight_ = true;
   }
 
-  healthy_ = valid;
   *out_temp_c = last_temp_c_;
-  return valid;
+  return has_new_value;
 }
 
 bool Ds18b20Sensor::isHealthy() const { return healthy_; }
