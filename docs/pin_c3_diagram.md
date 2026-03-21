@@ -17,19 +17,19 @@ flowchart LR
     BUZ["Active Buzzer"]
     VIB["Vibration Motor Driver"]
 
-    C3 ---|"GPIO8 SDA"| OLED
-    C3 ---|"GPIO9 SCL"| OLED
+    C3 ---|"GPIO5 SDA"| OLED
+    C3 ---|"GPIO10 SCL"| OLED
 
-    C3 ---|"GPIO8 SDA"| MPU
-    C3 ---|"GPIO9 SCL"| MPU
+    C3 ---|"GPIO5 SDA"| MPU
+    C3 ---|"GPIO10 SCL"| MPU
 
-    C3 ---|"GPIO8 SDA"| MAX
-    C3 ---|"GPIO9 SCL"| MAX
+    C3 ---|"GPIO5 SDA"| MAX
+    C3 ---|"GPIO10 SCL"| MAX
 
     C3 ---|"GPIO4"| DS
 
-    GPS -- "TX -> GPIO20 (RX)" --> C3
-    C3 -- "GPIO21 (TX) -> RX" --> GPS
+    GPS -- "TX -> GPIO6 (RX)" --> C3
+    C3 -- "GPIO7 (TX) -> RX" --> GPS
 
     C3 ---|"GPIO2"| BUZ
     C3 ---|"GPIO3"| VIB
@@ -39,17 +39,17 @@ flowchart LR
 
 | GPIO | Function | Connected Module |
 |---|---|---|
-| GPIO8 | I2C SDA | OLED, MPU6050, MAX30102 |
-| GPIO9 | I2C SCL | OLED, MPU6050, MAX30102 |
+| GPIO5 | I2C SDA | OLED, MPU6050, MAX30102 |
+| GPIO10 | I2C SCL | OLED, MPU6050, MAX30102 |
 | GPIO4 | OneWire | DS18B20 |
-| GPIO20 | UART RX | GPS TX |
-| GPIO21 | UART TX | GPS RX |
+| GPIO6 | UART RX | GPS TX |
+| GPIO7 | UART TX | GPS RX |
 | GPIO2 | Digital Output | Active Buzzer |
 | GPIO3 | Digital Output | Vibration Motor Driver |
 
 ## Bus Parameters
 
-- I2C frequency: `400000` Hz
+- I2C frequency: `100000` Hz
 - GPS UART baud rate: `9600`
 
 ## Wiring Notes

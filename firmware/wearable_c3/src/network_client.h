@@ -19,11 +19,15 @@ struct UploadResult {
 class WearableNetworkClient {
  public:
   void begin(const char* ssid, const char* password, uint16_t gateway_port,
+             uint16_t gateway_probe_port,
              const char* upload_path, const char* gateway_mdns_host,
              uint16_t gateway_discovery_port,
              uint16_t gateway_discovery_listen_port,
              const char* gateway_discovery_magic,
              uint32_t gateway_discovery_interval_ms,
+             uint32_t gateway_probe_interval_ms,
+             uint8_t gateway_probe_host_min, uint8_t gateway_probe_host_max,
+             uint32_t gateway_settle_ms,
              uint32_t reconnect_interval_ms, uint16_t http_connect_timeout_ms,
              uint16_t http_read_timeout_ms);
 
@@ -45,6 +49,8 @@ class WearableNetworkClient {
   bool ParseOverrideFromResponse(const String& response_json,
                                  OverrideCommand* out_override);
   void TryDiscoverGateway(uint32_t now_ms);
+  bool ProbeGatewayByTcp(const IPAddress& ip);
+  void ProbeSubnetCandidates(uint32_t now_ms);
   void PollDiscoveryReplies();
   void SetGatewayIp(const IPAddress& ip, const char* source);
   void ClearGatewayIp();
@@ -56,9 +62,13 @@ class WearableNetworkClient {
   char gateway_mdns_host_[48] = {0};
   char gateway_discovery_magic_[48] = {0};
   uint16_t port_ = 80;
+  uint16_t probe_port_ = 80;
   uint16_t gateway_discovery_port_ = 4210;
   uint16_t gateway_discovery_listen_port_ = 4211;
   uint32_t gateway_discovery_interval_ms_ = 5000;
+  uint32_t gateway_probe_interval_ms_ = 3000;
+  uint8_t gateway_probe_host_min_ = 1;
+  uint8_t gateway_probe_host_max_ = 12;
   uint32_t reconnect_interval_ms_ = 5000;
   uint16_t http_connect_timeout_ms_ = 3000;
   uint16_t http_read_timeout_ms_ = 3000;
@@ -69,6 +79,7 @@ class WearableNetworkClient {
   uint32_t last_status_change_ms_ = 0;
   uint32_t last_scan_log_ms_ = 0;
   uint32_t last_discovery_ms_ = 0;
+  uint32_t last_gateway_probe_ms_ = 0;
   uint32_t reconnect_attempt_count_ = 0;
   uint32_t connect_ok_count_ = 0;
   uint32_t connect_failed_count_ = 0;
@@ -78,6 +89,8 @@ class WearableNetworkClient {
   uint8_t upload_failure_streak_ = 0;
   uint32_t wifi_connected_since_ms_ = 0;
   uint32_t wifi_settle_ms_ = 1500;
+  uint32_t gateway_ip_set_ms_ = 0;
+  uint32_t gateway_settle_ms_ = 2500;
   bool mdns_started_ = false;
   bool udp_started_ = false;
   bool discovery_armed_ = false;

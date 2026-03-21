@@ -40,6 +40,7 @@ heatrisk::EffectiveDecision g_decision;
 uint32_t g_last_sample_ms = 0;
 uint32_t g_last_upload_ms = 0;
 uint32_t g_last_display_ms = 0;
+uint32_t g_last_max30102_poll_ms = 0;
 uint32_t g_last_state_log_ms = 0;
 heatrisk::StateLevel g_last_logged_effective_state = heatrisk::StateLevel::kNormal;
 
@@ -218,7 +219,15 @@ void SetupSensors() {
   const bool gps_ok = wearable_config::kEnableGps ? g_gps_sensor.begin() : false;
   const bool imu_ok = g_imu_sensor.begin(&Wire);
   const bool max_ok = wearable_config::kEnableMax3010x
-                          ? g_max30102_sensor.begin(&Wire)
+                          ? g_max30102_sensor.begin(
+                                &Wire, wearable_config::kMax3010xLedBrightness,
+                                wearable_config::kMax3010xSampleAverage,
+                                wearable_config::kMax3010xLedMode,
+                                wearable_config::kMax3010xSampleRate,
+                                wearable_config::kMax3010xPulseWidth,
+                                wearable_config::kMax3010xAdcRange,
+                                wearable_config::kMax3010xPulseAmplitudeRed,
+                                wearable_config::kMax3010xPulseAmplitudeIr)
                           : false;
   const bool oled_ok = g_display.begin(wearable_config::kOledI2cAddr);
 
@@ -233,20 +242,44 @@ void SetupSensors() {
       "max3010x_en=%d\n",
       temp_ok, gps_ok, imu_ok, max_ok, oled_ok, wearable_config::kEnableGps,
       wearable_config::kEnableMax3010x);
+
+  if (!wearable_config::kEnableMax3010x) {
+    Serial.println(
+        "[C3][INIT] MAX30102 disabled by config for stability; HR/SpO2 rules are suspended.");
+  }
 }
 
 void SetupNetwork() {
   g_network.begin(wearable_config::kWifiSsid, wearable_config::kWifiPassword,
-                  wearable_config::kGatewayPort,
+                  wearable_config::kGatewayPort, wearable_config::kGatewayProbePort,
                   wearable_config::kUploadPath,
                   wearable_config::kGatewayMdnsHost,
                   wearable_config::kGatewayDiscoveryPort,
                   wearable_config::kGatewayDiscoveryListenPort,
                   wearable_config::kGatewayDiscoveryMagic,
                   wearable_config::kGatewayDiscoveryIntervalMs,
+                  wearable_config::kGatewayProbeIntervalMs,
+                  wearable_config::kGatewayProbeHostMin,
+                  wearable_config::kGatewayProbeHostMax,
+                  wearable_config::kGatewaySettleMs,
                   wearable_config::kWifiReconnectIntervalMs,
                   wearable_config::kHttpConnectTimeoutMs,
                   wearable_config::kHttpReadTimeoutMs);
+}
+
+void TickMax30102Fast(uint32_t now_ms) {
+  if (!wearable_config::kEnableMax3010x) {
+    g_snapshot.sensor_health.max30102_ok = false;
+    return;
+  }
+  if (now_ms - g_last_max30102_poll_ms <
+      wearable_config::kMax3010xPollIntervalMs) {
+    return;
+  }
+  g_last_max30102_poll_ms = now_ms;
+
+  g_max30102_sensor.sample(&g_snapshot.physiology);
+  g_snapshot.sensor_health.max30102_ok = g_max30102_sensor.isHealthy();
 }
 
 void TickSample(uint32_t now_ms) {
@@ -271,13 +304,6 @@ void TickSample(uint32_t now_ms) {
 
   g_imu_sensor.sample(&g_snapshot.motion);
   g_snapshot.sensor_health.imu_ok = g_imu_sensor.isHealthy();
-
-  if (wearable_config::kEnableMax3010x) {
-    g_max30102_sensor.sample(&g_snapshot.physiology);
-    g_snapshot.sensor_health.max30102_ok = g_max30102_sensor.isHealthy();
-  } else {
-    g_snapshot.sensor_health.max30102_ok = false;
-  }
 
   g_snapshot.network.wifi_connected = g_network.isWifiConnected();
   g_snapshot.network.rssi = g_network.currentRssi();
@@ -368,6 +394,7 @@ void setup() {
 
   Wire.begin(wearable_config::kPinI2cSda, wearable_config::kPinI2cScl,
              wearable_config::kI2cFrequencyHz);
+  Wire.setTimeOut(wearable_config::kI2cTimeoutMs);
   g_alarm.begin();
   InitSnapshotBase();
   SetupSensors();
@@ -383,6 +410,7 @@ void loop() {
     g_gps_sensor.poll();
   }
   g_network.tick(now_ms);
+  TickMax30102Fast(now_ms);
   g_alarm.tick(now_ms);
 
   TickSample(now_ms);

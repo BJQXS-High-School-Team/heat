@@ -15,21 +15,26 @@ static constexpr const char* kDeviceType = "wearable";
 static constexpr const char* kWifiSsid = "blackmi";
 static constexpr const char* kWifiPassword = "wxy358800";
 static constexpr uint16_t kGatewayPort = 9080;  // C3->S3 TCP uplink port
+static constexpr uint16_t kGatewayProbePort = 80;  // 用于发现探测，避免占用上传端口
 static constexpr const char* kUploadPath = "";  // 保留占位（TCP 模式不使用）
 static constexpr uint32_t kWifiReconnectIntervalMs = 5000;
-static constexpr uint32_t kHttpConnectTimeoutMs = 2000;  // TCP connect timeout
-static constexpr uint32_t kHttpReadTimeoutMs = 2000;     // TCP response timeout
+static constexpr uint32_t kHttpConnectTimeoutMs = 4000;  // TCP connect timeout
+static constexpr uint32_t kHttpReadTimeoutMs = 3000;     // TCP response timeout
 // 自动发现 S3：优先 mDNS，其次 UDP 广播
 static constexpr const char* kGatewayMdnsHost = "heatrisk-gateway";
 static constexpr uint16_t kGatewayDiscoveryPort = 4210;
 static constexpr uint16_t kGatewayDiscoveryListenPort = 4211;
 static constexpr const char* kGatewayDiscoveryMagic = "HEATRISK_DISCOVER_V1";
 static constexpr uint32_t kGatewayDiscoveryIntervalMs = 5000;
+static constexpr uint32_t kGatewayProbeIntervalMs = 3000;
+static constexpr uint8_t kGatewayProbeHostMin = 1;
+static constexpr uint8_t kGatewayProbeHostMax = 12;
+static constexpr uint32_t kGatewaySettleMs = 2500;
 
 // ---------- Pin Mapping (ESP32-C3) ----------
-// 当前联调阶段按现有接线保持 GPIO8/9；若改线后可再切回非 strapping 脚。
-static constexpr uint8_t kPinI2cSda = 8;
-static constexpr uint8_t kPinI2cScl = 9;
+// C3 端 I2C 改到更安全的 GPIO5/10，降低多模块并联时的稳态风险。
+static constexpr uint8_t kPinI2cSda = 5;
+static constexpr uint8_t kPinI2cScl = 10;
 static constexpr uint8_t kPinDs18b20 = 4;
 // 避免占用可能与下载/串口复用冲突的 20/21，引脚改为更安全的 GPIO6/7。
 // 接线: GPS TX -> C3 RX(GPIO6), GPS RX -> C3 TX(GPIO7)
@@ -37,7 +42,9 @@ static constexpr uint8_t kPinGpsRx = 6;
 static constexpr uint8_t kPinGpsTx = 7;
 static constexpr uint8_t kPinBuzzer = 2;
 static constexpr uint8_t kPinVibration = 3;
-static constexpr uint32_t kI2cFrequencyHz = 400000;
+// 多个 I2C 模块并联时优先稳态，先降到 100kHz。
+static constexpr uint32_t kI2cFrequencyHz = 100000;
+static constexpr uint32_t kI2cTimeoutMs = 20;
 static constexpr uint32_t kGpsBaud = 9600;
 
 // ---------- OLED ----------
@@ -49,14 +56,27 @@ static constexpr int8_t kOledResetPin = -1;
 // ---------- Scheduling ----------
 static constexpr uint32_t kSampleIntervalMs = 1000;
 static constexpr uint32_t kUploadIntervalMs = 2000;
-static constexpr uint32_t kDisplayIntervalMs = 500;
+static constexpr uint32_t kDisplayIntervalMs = 1000;
+static constexpr uint32_t kMax3010xPollIntervalMs = 20;
 
 // ---------- Sensor Feature Switch ----------
 // When false: skip MAX3010x init/read, keep other functions running.
-// 临时建议：MAX30102 更换期间可设为 false，避免影响整机联调。
-static constexpr bool kEnableMax3010x = false;
+// 当前使用非阻塞 FIFO 读取路径重新验证 MAX30102 对系统稳态的影响。
+// 若现场仍然出现联网/上传被拖慢，可临时改回 false 继续联调其它模块。
+static constexpr bool kEnableMax3010x = true;
 // 临时建议：如果 GPS 模块接入导致 Wi-Fi 不稳定，可先关闭 GPS 接口联调其余链路。
-static constexpr bool kEnableGps = true;
+static constexpr bool kEnableGps =true;
+
+// ---------- MAX30102 ----------
+// 以稳态为主，降低 I2C 压力和 LED 电流脉冲。
+static constexpr uint8_t kMax3010xLedBrightness = 18;
+static constexpr uint8_t kMax3010xSampleAverage = 4;
+static constexpr uint8_t kMax3010xLedMode = 2;
+static constexpr uint16_t kMax3010xSampleRate = 50;
+static constexpr uint16_t kMax3010xPulseWidth = 215;
+static constexpr uint16_t kMax3010xAdcRange = 2048;
+static constexpr uint8_t kMax3010xPulseAmplitudeRed = 0x10;
+static constexpr uint8_t kMax3010xPulseAmplitudeIr = 0x10;
 
 // ---------- Local Rule Thresholds ----------
 static const heatrisk::LocalThresholds kThresholds = []() {

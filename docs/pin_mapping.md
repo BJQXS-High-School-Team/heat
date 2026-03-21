@@ -4,11 +4,11 @@
 
 ## ESP32-C3 Wearable
 
-- I2C SDA: `GPIO8`（OLED / MPU6050 / MAX30102）
-- I2C SCL: `GPIO9`
+- I2C SDA: `GPIO5`（OLED / MPU6050 / MAX30102）
+- I2C SCL: `GPIO10`
 - DS18B20 OneWire: `GPIO4`
-- GPS UART RX（C3 接收）: `GPIO20`
-- GPS UART TX（C3 发送）: `GPIO21`
+- GPS UART RX（C3 接收）: `GPIO6`
+- GPS UART TX（C3 发送）: `GPIO7`
 - Buzzer: `GPIO2`
 - Vibration Motor Driver: `GPIO3`
 

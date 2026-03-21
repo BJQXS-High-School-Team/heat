@@ -46,7 +46,7 @@ static constexpr uint8_t kBh1750I2cAddr = 0x23;
 // ---------- HTTP ----------
 static constexpr uint16_t kHttpPort = 80;
 static constexpr uint16_t kWearableTcpPort = 9080;
-static constexpr uint32_t kWearableTcpReadTimeoutMs = 1500;
+static constexpr uint32_t kWearableTcpReadTimeoutMs = 300;
 static constexpr const char* kGatewayMdnsHost = "heatrisk-gateway";
 static constexpr uint16_t kGatewayDiscoveryPort = 4210;
 static constexpr const char* kGatewayDiscoveryMagic = "HEATRISK_DISCOVER_V1";

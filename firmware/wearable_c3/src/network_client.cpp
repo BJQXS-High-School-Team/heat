@@ -97,18 +97,24 @@ void LogNearbyAps() {
 
 void WearableNetworkClient::begin(const char* ssid, const char* password,
                                   uint16_t gateway_port,
+                                  uint16_t gateway_probe_port,
                                   const char* upload_path,
                                   const char* gateway_mdns_host,
                                   uint16_t gateway_discovery_port,
                                   uint16_t gateway_discovery_listen_port,
                                   const char* gateway_discovery_magic,
                                   uint32_t gateway_discovery_interval_ms,
+                                  uint32_t gateway_probe_interval_ms,
+                                  uint8_t gateway_probe_host_min,
+                                  uint8_t gateway_probe_host_max,
+                                  uint32_t gateway_settle_ms,
                                   uint32_t reconnect_interval_ms,
                                   uint16_t http_connect_timeout_ms,
                                   uint16_t http_read_timeout_ms) {
   ssid_ = ssid;
   password_ = password;
   port_ = gateway_port;
+  probe_port_ = gateway_probe_port;
   path_ = upload_path;
   SafeCopy(gateway_mdns_host_, sizeof(gateway_mdns_host_), gateway_mdns_host);
   gateway_discovery_port_ = gateway_discovery_port;
@@ -116,6 +122,10 @@ void WearableNetworkClient::begin(const char* ssid, const char* password,
   SafeCopy(gateway_discovery_magic_, sizeof(gateway_discovery_magic_),
            gateway_discovery_magic);
   gateway_discovery_interval_ms_ = gateway_discovery_interval_ms;
+  gateway_probe_interval_ms_ = gateway_probe_interval_ms;
+  gateway_probe_host_min_ = gateway_probe_host_min;
+  gateway_probe_host_max_ = gateway_probe_host_max;
+  gateway_settle_ms_ = gateway_settle_ms;
   reconnect_interval_ms_ = reconnect_interval_ms;
   http_connect_timeout_ms_ = http_connect_timeout_ms;
   http_read_timeout_ms_ = http_read_timeout_ms;
@@ -124,6 +134,7 @@ void WearableNetworkClient::begin(const char* ssid, const char* password,
   last_status_change_ms_ = last_reconnect_attempt_ms_;
   last_scan_log_ms_ = 0;
   last_discovery_ms_ = 0;
+  last_gateway_probe_ms_ = 0;
   reconnect_attempt_count_ = 0;
   connect_ok_count_ = 0;
   connect_failed_count_ = 0;
@@ -131,6 +142,7 @@ void WearableNetworkClient::begin(const char* ssid, const char* password,
   disconnect_count_ = 0;
   connection_lost_count_ = 0;
   upload_failure_streak_ = 0;
+  gateway_ip_set_ms_ = 0;
   mdns_started_ = false;
   udp_started_ = false;
   discovery_armed_ = true;
@@ -150,6 +162,64 @@ void WearableNetworkClient::begin(const char* ssid, const char* password,
   Serial.println("[C3][DISCOVERY] armed=1 (auto)");
 }
 
+bool WearableNetworkClient::ProbeGatewayByTcp(const IPAddress& ip) {
+  WiFiClient client;
+  client.setTimeout(200);
+  const bool connected = client.connect(ip, probe_port_, 250);
+  if (!connected) {
+    client.stop();
+    return false;
+  }
+  client.stop();
+  SetGatewayIp(ip, "probe");
+  return true;
+}
+
+void WearableNetworkClient::ProbeSubnetCandidates(uint32_t now_ms) {
+  if (hasGatewayEndpoint()) {
+    return;
+  }
+  if (now_ms - last_gateway_probe_ms_ < gateway_probe_interval_ms_) {
+    return;
+  }
+  last_gateway_probe_ms_ = now_ms;
+
+  const IPAddress local_ip = WiFi.localIP();
+  if (!local_ip) {
+    return;
+  }
+
+  const uint8_t self_host = local_ip[3];
+  const uint8_t preferred_hosts[2] = {
+      static_cast<uint8_t>(self_host + 1), static_cast<uint8_t>(self_host - 1)};
+
+  for (uint8_t host : preferred_hosts) {
+    if (host < gateway_probe_host_min_ || host > gateway_probe_host_max_ ||
+        host == self_host) {
+      continue;
+    }
+    IPAddress candidate(local_ip[0], local_ip[1], local_ip[2], host);
+    if (ProbeGatewayByTcp(candidate)) {
+      Serial.printf("[C3][DISCOVERY] tcp probe hit=%s\n",
+                    candidate.toString().c_str());
+      return;
+    }
+  }
+
+  for (uint8_t host = gateway_probe_host_min_; host <= gateway_probe_host_max_;
+       ++host) {
+    if (host == self_host) {
+      continue;
+    }
+    IPAddress candidate(local_ip[0], local_ip[1], local_ip[2], host);
+    if (ProbeGatewayByTcp(candidate)) {
+      Serial.printf("[C3][DISCOVERY] tcp probe hit=%s\n",
+                    candidate.toString().c_str());
+      return;
+    }
+  }
+}
+
 void WearableNetworkClient::SetGatewayIp(const IPAddress& ip,
                                          const char* source) {
   char ip_buf[16];
@@ -158,11 +228,15 @@ void WearableNetworkClient::SetGatewayIp(const IPAddress& ip,
     return;
   }
   SafeCopy(gateway_ip_, sizeof(gateway_ip_), ip_buf);
+  gateway_ip_set_ms_ = millis();
   Serial.printf("[C3][DISCOVERY] gateway ip=%s via=%s\n", gateway_ip_,
                 source == nullptr ? "unknown" : source);
 }
 
-void WearableNetworkClient::ClearGatewayIp() { gateway_ip_[0] = '\0'; }
+void WearableNetworkClient::ClearGatewayIp() {
+  gateway_ip_[0] = '\0';
+  gateway_ip_set_ms_ = 0;
+}
 
 bool WearableNetworkClient::hasGatewayEndpoint() const {
   return gateway_ip_[0] != '\0';
@@ -196,9 +270,13 @@ void WearableNetworkClient::printWifiDiag() {
                 static_cast<unsigned long>(last_status_change_ms_),
                 static_cast<unsigned long>(millis()));
   Serial.printf("[C3][DIAG] discovery_armed=%d\n", discovery_armed_);
-
-  Serial.println("[C3][DIAG] scanning nearby APs...");
-  LogNearbyAps();
+  if (connected) {
+    Serial.println(
+        "[C3][DIAG] skip AP scan while connected to avoid disrupting Wi-Fi");
+  } else {
+    Serial.println("[C3][DIAG] scanning nearby APs...");
+    LogNearbyAps();
+  }
 }
 
 void WearableNetworkClient::triggerGatewayDiscovery(
@@ -300,6 +378,7 @@ void WearableNetworkClient::TryDiscoverGateway(uint32_t now_ms) {
   }
 
   PollDiscoveryReplies();
+  ProbeSubnetCandidates(now_ms);
 }
 
 void WearableNetworkClient::tick(uint32_t now_ms) {
@@ -418,6 +497,10 @@ UploadResult WearableNetworkClient::uploadTelemetry(
   if (!hasGatewayEndpoint()) {
     return result;
   }
+  if (gateway_ip_set_ms_ == 0 ||
+      (millis() - gateway_ip_set_ms_) < gateway_settle_ms_) {
+    return result;
+  }
 
   StaticJsonDocument<1536> doc;
   doc[jsonkeys::kSchemaVersion] = snapshot.schema_version;
@@ -468,7 +551,7 @@ UploadResult WearableNetworkClient::uploadTelemetry(
     return result;
   }
 
-  for (int attempt = 1; attempt <= 2; ++attempt) {
+  for (int attempt = 1; attempt <= 3; ++attempt) {
     WiFiClient client;
     client.setTimeout(http_read_timeout_ms_);
     const bool connected = client.connect(gateway_ip, port_, http_connect_timeout_ms_);
@@ -477,8 +560,8 @@ UploadResult WearableNetworkClient::uploadTelemetry(
       last_error_msg = "connect_failed";
       Serial.printf("[C3][TCP] connect_err attempt=%d target=%s:%u\n", attempt,
                     gateway_ip_, port_);
-      if (attempt == 1) {
-        delay(20);
+      if (attempt < 3) {
+        delay(120);
       }
       continue;
     }
@@ -490,8 +573,8 @@ UploadResult WearableNetworkClient::uploadTelemetry(
       result.http_status = -1003;
       last_error_msg = "write_failed";
       client.stop();
-      if (attempt == 1) {
-        delay(20);
+      if (attempt < 3) {
+        delay(120);
       }
       continue;
     }
@@ -502,8 +585,8 @@ UploadResult WearableNetworkClient::uploadTelemetry(
       Serial.printf("[C3][TCP] read_timeout attempt=%d target=%s:%u\n", attempt,
                     gateway_ip_, port_);
       client.stop();
-      if (attempt == 1) {
-        delay(20);
+      if (attempt < 3) {
+        delay(120);
       }
       continue;
     }
@@ -524,8 +607,12 @@ UploadResult WearableNetworkClient::uploadTelemetry(
                   result.http_status, last_error_msg.c_str(),
                   upload_failure_streak_);
     if (upload_failure_streak_ >= 3) {
-      Serial.println("[C3][DISCOVERY] clear gateway after TCP errors");
-      ClearGatewayIp();
+      // 热点/局域网偶发抖动时，保留最近一次已知网关地址，避免频繁退回未发现状态。
+      // 同时重新触发发现链路，用于旁路校验/刷新网关地址。
+      Serial.println("[C3][DISCOVERY] re-arm discovery after TCP errors");
+      discovery_armed_ = true;
+      last_discovery_ms_ = 0;
+      last_gateway_probe_ms_ = 0;
       upload_failure_streak_ = 0;
     }
   }
