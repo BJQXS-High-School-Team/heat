@@ -68,15 +68,15 @@ static constexpr bool kEnableMax3010x = true;
 static constexpr bool kEnableGps =true;
 
 // ---------- MAX30102 ----------
-// 以稳态为主，降低 I2C 压力和 LED 电流脉冲。
-static constexpr uint8_t kMax3010xLedBrightness = 18;
-static constexpr uint8_t kMax3010xSampleAverage = 4;
+// 当前网络链路已恢复稳定，调高 MAX30102 采样参数以便更容易形成可检测心率波形。
+static constexpr uint8_t kMax3010xLedBrightness = 0x24;
+static constexpr uint8_t kMax3010xSampleAverage = 1;
 static constexpr uint8_t kMax3010xLedMode = 2;
-static constexpr uint16_t kMax3010xSampleRate = 50;
-static constexpr uint16_t kMax3010xPulseWidth = 215;
-static constexpr uint16_t kMax3010xAdcRange = 2048;
-static constexpr uint8_t kMax3010xPulseAmplitudeRed = 0x10;
-static constexpr uint8_t kMax3010xPulseAmplitudeIr = 0x10;
+static constexpr uint16_t kMax3010xSampleRate = 100;
+static constexpr uint16_t kMax3010xPulseWidth = 411;
+static constexpr uint16_t kMax3010xAdcRange = 4096;
+static constexpr uint8_t kMax3010xPulseAmplitudeRed = 0x24;
+static constexpr uint8_t kMax3010xPulseAmplitudeIr = 0x24;
 
 // ---------- Local Rule Thresholds ----------
 static const heatrisk::LocalThresholds kThresholds = []() {
