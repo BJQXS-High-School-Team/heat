@@ -77,12 +77,14 @@ void PrintCommandHelp() {
   Serial.println("[C3][CMD]   help | ?                    -> show help");
   Serial.println("[C3][CMD]   wifistatus                  -> show Wi-Fi/discovery state");
   Serial.println("[C3][CMD]   wifi_diag                   -> show detailed Wi-Fi diagnostics");
+  Serial.println("[C3][CMD]   gpsstatus                   -> show GPS UART/fix diagnostics");
   Serial.println("[C3][CMD]   setgw <ipv4>                -> set gateway ip manually");
   Serial.println("[C3][CMD]   discover                    -> force immediate mDNS+UDP discovery");
   Serial.println("[C3][CMD]   rediscover                  -> clear cached gateway ip and rediscover");
   Serial.println("[C3][CMD] examples:");
   Serial.println("[C3][CMD]   wifistatus");
   Serial.println("[C3][CMD]   wifi_diag");
+  Serial.println("[C3][CMD]   gpsstatus");
   Serial.println("[C3][CMD]   setgw 192.168.43.1");
   Serial.println("[C3][CMD]   discover");
   Serial.println("[C3][CMD]   rediscover");
@@ -101,6 +103,35 @@ void PrintWifiStatusCommand() {
       WifiStatusToString(status), static_cast<int>(status), connected,
       ip.c_str(), static_cast<long>(rssi), wearable_config::kWifiSsid,
       g_network.currentGatewayIp(), g_network.isDiscoveryArmed());
+}
+
+void PrintGpsStatusCommand() {
+  if (!wearable_config::kEnableGps) {
+    Serial.println("[C3][CMD] gpsstatus gps_enabled=0");
+    return;
+  }
+
+  heatrisk::GpsDebugInfo info;
+  g_gps_sensor.getDebugInfo(millis(), &info);
+  if (info.last_sentence_age_ms == 0xFFFFFFFFUL) {
+    Serial.printf(
+        "[C3][CMD] gpsstatus healthy=%d stream_ok=%d has_fix=%d sat=%u bytes=%lu sentences=%lu last_sentence_age_ms=never lat=%.6f lng=%.6f c3_rx_pin=%u c3_tx_pin=%u baud=%lu\n",
+        g_gps_sensor.isHealthy(), info.stream_ok, info.has_fix, info.satellites,
+        static_cast<unsigned long>(info.bytes_read),
+        static_cast<unsigned long>(info.sentences), info.lat, info.lng,
+        wearable_config::kPinGpsRx, wearable_config::kPinGpsTx,
+        static_cast<unsigned long>(wearable_config::kGpsBaud));
+    return;
+  }
+
+  Serial.printf(
+      "[C3][CMD] gpsstatus healthy=%d stream_ok=%d has_fix=%d sat=%u bytes=%lu sentences=%lu last_sentence_age_ms=%lu lat=%.6f lng=%.6f c3_rx_pin=%u c3_tx_pin=%u baud=%lu\n",
+      g_gps_sensor.isHealthy(), info.stream_ok, info.has_fix, info.satellites,
+      static_cast<unsigned long>(info.bytes_read),
+      static_cast<unsigned long>(info.sentences),
+      static_cast<unsigned long>(info.last_sentence_age_ms), info.lat, info.lng,
+      wearable_config::kPinGpsRx, wearable_config::kPinGpsTx,
+      static_cast<unsigned long>(wearable_config::kGpsBaud));
 }
 
 void HandleSerialCommand(const char* line) {
@@ -123,6 +154,10 @@ void HandleSerialCommand(const char* line) {
   }
   if (strcmp(cmd, "wifi_diag") == 0) {
     g_network.printWifiDiag();
+    return;
+  }
+  if (strcmp(cmd, "gpsstatus") == 0) {
+    PrintGpsStatusCommand();
     return;
   }
   if (strcmp(cmd, "setgw") == 0) {

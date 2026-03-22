@@ -14,8 +14,10 @@ bool GpsSensor::begin() {
 void GpsSensor::poll() {
   while (serial_.available() > 0) {
     const char c = static_cast<char>(serial_.read());
+    ++bytes_read_;
     if (gps_.encode(c)) {
       last_sentence_ms_ = millis();
+      ++sentences_;
     }
   }
 }
@@ -30,6 +32,8 @@ bool GpsSensor::sample(GpsData* out_gps) {
   current.satellites = gps_.satellites.isValid()
                            ? static_cast<uint8_t>(gps_.satellites.value())
                            : 0;
+  last_has_fix_ = current.has_fix;
+  last_satellites_ = current.satellites;
 
   if (gps_.location.isValid()) {
     current.lat = gps_.location.lat();
@@ -46,5 +50,22 @@ bool GpsSensor::sample(GpsData* out_gps) {
 }
 
 bool GpsSensor::isHealthy() const { return healthy_; }
+
+void GpsSensor::getDebugInfo(uint32_t now_ms, GpsDebugInfo* out_info) const {
+  if (out_info == nullptr) {
+    return;
+  }
+
+  out_info->stream_ok =
+      (last_sentence_ms_ != 0) && ((now_ms - last_sentence_ms_) <= 5000);
+  out_info->has_fix = last_has_fix_;
+  out_info->satellites = last_satellites_;
+  out_info->bytes_read = bytes_read_;
+  out_info->sentences = sentences_;
+  out_info->last_sentence_age_ms =
+      (last_sentence_ms_ == 0) ? 0xFFFFFFFFUL : (now_ms - last_sentence_ms_);
+  out_info->lat = last_good_.lat;
+  out_info->lng = last_good_.lng;
+}
 
 }  // namespace heatrisk

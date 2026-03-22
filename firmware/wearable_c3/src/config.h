@@ -37,7 +37,8 @@ static constexpr uint8_t kPinI2cSda = 5;
 static constexpr uint8_t kPinI2cScl = 10;
 static constexpr uint8_t kPinDs18b20 = 4;
 // 避免占用可能与下载/串口复用冲突的 20/21，引脚改为更安全的 GPIO6/7。
-// 接线: GPS TX -> C3 RX(GPIO6), GPS RX -> C3 TX(GPIO7)
+// 注意：这里的 Rx/Tx 是“ESP32-C3 这一侧”的串口命名。
+// 接线应交叉：GPS TX -> C3 RX(GPIO6), GPS RX -> C3 TX(GPIO7)
 static constexpr uint8_t kPinGpsRx = 6;
 static constexpr uint8_t kPinGpsTx = 7;
 static constexpr uint8_t kPinBuzzer = 2;
