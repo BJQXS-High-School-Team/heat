@@ -6,16 +6,16 @@
 
 namespace heatrisk {
 
-// 评估本地状态（仅使用本地可用传感数据）
+// Evaluate local state using only locally available sensor data.
 LocalStateEvalResult EvaluateLocalState(const PhysiologyData& physiology,
                                         const MotionData& motion,
                                         const SensorHealth& sensor_health,
                                         const LocalThresholds& thresholds);
 
-// override 是否在当前时刻有效
+// Check whether an override command is still active at now_ms.
 bool IsOverrideActive(const OverrideCommand& command, uint32_t now_ms);
 
-// 根据优先级生成有效状态：override（有效）> 本地状态
+// Resolve effective state with priority: active override > local state.
 StateLevel ResolveEffectiveState(StateLevel local_state,
                                  const OverrideCommand& command,
                                  uint32_t now_ms);

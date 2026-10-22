@@ -1,93 +1,89 @@
 #include "sensors_max30102.h"
 
-#include <heartRate.h>
-#include <math.h>
+#include <Arduino.h>
+#include <string.h>
+
+#include "max30102_algorithm.h"
 
 namespace heatrisk {
 
 namespace {
 
-float Clamp(float value, float low, float high) {
-  if (value < low) {
-    return low;
-  }
-  if (value > high) {
-    return high;
-  }
-  return value;
-}
+constexpr uint32_t kDebugLogIntervalMs = 1000;
 
 }  // namespace
 
-bool Max30102Sensor::begin(TwoWire* wire) {
+bool Max30102Sensor::begin(TwoWire* wire, uint8_t led_brightness,
+                           uint8_t sample_average, uint8_t led_mode,
+                           uint16_t sample_rate, uint16_t pulse_width,
+                           uint16_t adc_range, uint8_t pulse_amplitude_red,
+                           uint8_t pulse_amplitude_ir) {
   if (wire == nullptr) {
     return false;
   }
 
-  if (!sensor_.begin(*wire, I2C_SPEED_FAST)) {
+  if (!sensor_.begin(*wire, I2C_SPEED_STANDARD)) {
     initialized_ = false;
     healthy_ = false;
     return false;
   }
 
-  // 采用库推荐参数，输出趋势数据用于预警，不作为医疗诊断。
-  sensor_.setup(/*ledBrightness=*/60, /*sampleAverage=*/4, /*ledMode=*/2,
-                /*sampleRate=*/100, /*pulseWidth=*/411, /*adcRange=*/4096);
-  sensor_.setPulseAmplitudeRed(0x1F);
-  sensor_.setPulseAmplitudeIR(0x1F);
+  sensor_.setup(led_brightness, sample_average, led_mode, sample_rate,
+                pulse_width, adc_range);
+  sensor_.setPulseAmplitudeRed(pulse_amplitude_red);
+  sensor_.setPulseAmplitudeIR(pulse_amplitude_ir);
 
   initialized_ = true;
   healthy_ = true;
   return true;
 }
 
-bool Max30102Sensor::PushSample(uint32_t red, uint32_t ir) {
-  if (red == 0 || ir == 0) {
-    return false;
+void Max30102Sensor::PushSample(uint32_t red, uint32_t ir) {
+  if (valid_sample_count_ < kWindowSize) {
+    red_window_[valid_sample_count_] = red;
+    ir_window_[valid_sample_count_] = ir;
+    ++valid_sample_count_;
+  } else {
+    memmove(red_window_, red_window_ + 1,
+            sizeof(red_window_[0]) * (kWindowSize - 1));
+    memmove(ir_window_, ir_window_ + 1,
+            sizeof(ir_window_[0]) * (kWindowSize - 1));
+    red_window_[kWindowSize - 1] = red;
+    ir_window_[kWindowSize - 1] = ir;
   }
-  red_window_[window_index_] = red;
-  ir_window_[window_index_] = ir;
-  window_index_ = (window_index_ + 1) % kWindowSize;
-  if (window_count_ < kWindowSize) {
-    ++window_count_;
-  }
-  return true;
+  ++samples_since_eval_;
 }
 
-float Max30102Sensor::EstimateSpo2Trend() {
-  if (window_count_ < 12) {
-    return NAN;
+bool Max30102Sensor::HaveWindowReady() const {
+  return valid_sample_count_ >= kWindowSize &&
+         samples_since_eval_ >= kEvalStepSamples;
+}
+
+void Max30102Sensor::ComputeWindowMetrics() {
+  Max30102AlgoResult result;
+  if (!ComputeMax30102Metrics(ir_window_, red_window_, kWindowSize, &result)) {
+    return;
   }
 
-  float red_sum = 0.0f;
-  float ir_sum = 0.0f;
-  for (uint8_t i = 0; i < window_count_; ++i) {
-    red_sum += static_cast<float>(red_window_[i]);
-    ir_sum += static_cast<float>(ir_window_[i]);
-  }
-  const float red_dc = red_sum / window_count_;
-  const float ir_dc = ir_sum / window_count_;
-  if (red_dc <= 1.0f || ir_dc <= 1.0f) {
-    return NAN;
+  if (result.heart_rate_valid &&
+      result.heart_rate_bpm >= 35.0f &&
+      result.heart_rate_bpm <= 220.0f) {
+    last_heart_rate_bpm_ =
+        has_hr_ ? (last_heart_rate_bpm_ * 0.6f + result.heart_rate_bpm * 0.4f)
+                : result.heart_rate_bpm;
+    has_hr_ = true;
   }
 
-  float red_var = 0.0f;
-  float ir_var = 0.0f;
-  for (uint8_t i = 0; i < window_count_; ++i) {
-    const float red_delta = static_cast<float>(red_window_[i]) - red_dc;
-    const float ir_delta = static_cast<float>(ir_window_[i]) - ir_dc;
-    red_var += red_delta * red_delta;
-    ir_var += ir_delta * ir_delta;
-  }
-  const float red_ac = sqrtf(red_var / window_count_);
-  const float ir_ac = sqrtf(ir_var / window_count_);
-  if (red_ac <= 0.1f || ir_ac <= 0.1f) {
-    return NAN;
+  if (result.spo2_valid &&
+      result.spo2_pct >= 70.0f &&
+      result.spo2_pct <= 100.0f) {
+    last_spo2_pct_ =
+        has_spo2_ ? (last_spo2_pct_ * 0.6f + result.spo2_pct * 0.4f)
+                  : result.spo2_pct;
+    has_spo2_ = true;
   }
 
-  const float ratio = (red_ac / red_dc) / (ir_ac / ir_dc);
-  const float spo2 = 110.0f - 25.0f * ratio;
-  return Clamp(spo2, 70.0f, 100.0f);
+  samples_since_eval_ = 0;
 }
 
 bool Max30102Sensor::sample(PhysiologyData* inout_physiology) {
@@ -96,44 +92,28 @@ bool Max30102Sensor::sample(PhysiologyData* inout_physiology) {
     return false;
   }
 
-  const uint32_t ir = sensor_.getIR();
-  const uint32_t red = sensor_.getRed();
-  const bool contact_ok = (ir > 5000) && (red > 5000);
+  sensor_.check();
 
-  if (!contact_ok) {
-    healthy_ = false;
-    if (has_hr_) {
-      inout_physiology->heart_rate_bpm = last_heart_rate_bpm_;
+  bool has_sample = false;
+  bool contact_ok = false;
+  while (sensor_.available()) {
+    const uint32_t red = sensor_.getFIFORed();
+    const uint32_t ir = sensor_.getFIFOIR();
+    sensor_.nextSample();
+    has_sample = true;
+    last_red_ = red;
+    last_ir_ = ir;
+
+    const bool sample_contact_ok = (ir > 5000) && (red > 5000);
+    if (!sample_contact_ok) {
+      continue;
     }
-    if (has_spo2_) {
-      inout_physiology->spo2_pct = last_spo2_pct_;
-    }
-    return false;
+    contact_ok = true;
+    PushSample(red, ir);
   }
 
-  PushSample(red, ir);
-
-  if (checkForBeat(ir)) {
-    const uint32_t now = millis();
-    if (last_beat_ms_ > 0) {
-      const float delta_s = (now - last_beat_ms_) / 1000.0f;
-      if (delta_s > 0.01f) {
-        const float bpm = 60.0f / delta_s;
-        if (bpm > 35.0f && bpm < 220.0f) {
-          last_heart_rate_bpm_ =
-              has_hr_ ? (last_heart_rate_bpm_ * 0.7f + bpm * 0.3f) : bpm;
-          has_hr_ = true;
-        }
-      }
-    }
-    last_beat_ms_ = now;
-  }
-
-  const float spo2_est = EstimateSpo2Trend();
-  if (!isnan(spo2_est) && spo2_est >= 70.0f && spo2_est <= 100.0f) {
-    last_spo2_pct_ =
-        has_spo2_ ? (last_spo2_pct_ * 0.7f + spo2_est * 0.3f) : spo2_est;
-    has_spo2_ = true;
+  if (HaveWindowReady()) {
+    ComputeWindowMetrics();
   }
 
   if (has_hr_) {
@@ -143,8 +123,19 @@ bool Max30102Sensor::sample(PhysiologyData* inout_physiology) {
     inout_physiology->spo2_pct = last_spo2_pct_;
   }
 
-  // 仅当心率和血氧趋势值都可用时，标记传感器健康。
-  healthy_ = has_hr_ && has_spo2_;
+  healthy_ = contact_ok && has_hr_ && has_spo2_;
+
+  const uint32_t now_ms = millis();
+  if ((now_ms - last_debug_ms_) >= kDebugLogIntervalMs) {
+    last_debug_ms_ = now_ms;
+    Serial.printf(
+        "[C3][MAX30102] sample=%d contact=%d red=%lu ir=%lu hr=%.1f spo2=%.1f has_hr=%d has_spo2=%d healthy=%d window=%u pending=%u\n",
+        has_sample, contact_ok, static_cast<unsigned long>(last_red_),
+        static_cast<unsigned long>(last_ir_), last_heart_rate_bpm_,
+        last_spo2_pct_, has_hr_, has_spo2_, healthy_, valid_sample_count_,
+        samples_since_eval_);
+  }
+
   return healthy_;
 }
 

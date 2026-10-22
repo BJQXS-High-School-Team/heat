@@ -3,15 +3,19 @@
   "site_id": "site-a",
   "gateway_id": "gateway-s3-001",
   "gateway_time_ms": 9876543,
+  "gateway_receive_epoch_ms": 0,
   "gateway_ambient": {
     "temperature_c": 34.1,
     "humidity_pct": 62.5,
     "light_lux": 14000.0
   },
-  "health": {
-    "wifi_connected": true,
-    "mqtt_connected": true,
+  "sensor_health": {
     "sht35_ok": true,
     "bh1750_ok": true
+  },
+  "network": {
+    "wifi_connected": true,
+    "mqtt_connected": true,
+    "rssi": -51
   }
 }

@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "gateway_time_ms": 245001,
+  "gateway_receive_epoch_ms": 0,
+  "override": {
+    "enabled": true,
+    "state": "danger",
+    "reason": "cloud_ai_override",
+    "vibrate": true,
+    "buzzer": true,
+    "expires_in_s": 30
+  }
+}

@@ -10,6 +10,11 @@ class ClientConfig:
     password: str = ""
     site_id: str = "site-a"
     keepalive_s: int = 30
+    bemfa_mode: bool = False
+    bemfa_topic_gateway: str = "heatriskgw004"
+    bemfa_topic_wearable_telemetry: str = "heatriskwb004"
+    bemfa_topic_wearable_status: str = "heatriskst004"
+    bemfa_topic_command: str = "heatriskcmd004"
 
 
 @dataclass

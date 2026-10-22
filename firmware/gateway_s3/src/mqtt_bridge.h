@@ -19,7 +19,11 @@ class MqttBridge {
   void begin(const char* site_id, const char* gateway_id, const char* mqtt_host,
              uint16_t mqtt_port, const char* mqtt_username,
              const char* mqtt_password, uint32_t reconnect_interval_ms,
-             uint32_t publish_interval_ms, uint16_t packet_buffer_size);
+             uint32_t publish_interval_ms, uint16_t packet_buffer_size,
+             bool bemfa_mode, const char* bemfa_client_id,
+             const char* bemfa_topic_gateway, const char* bemfa_topic_wearable_telemetry,
+             const char* bemfa_topic_wearable_status,
+             const char* bemfa_topic_command);
 
   void tick(uint32_t now_ms);
   bool isConnected();
@@ -29,6 +33,9 @@ class MqttBridge {
   void publishIfDue(uint32_t now_ms);
   void publishGatewayTelemetry();
   void publishWearableTelemetryAndStatus(uint32_t now_ms);
+  bool IsBemfaCommandTopic(const char* topic) const;
+  bool BuildPublishTopic(const char* base_topic, bool use_set, char* out,
+                         size_t out_size) const;
 
   void onMessage(char* topic, uint8_t* payload, unsigned int length);
   void applyCommandPayload(const char* topic, const char* payload_json,
@@ -59,6 +66,12 @@ class MqttBridge {
   char command_wildcard_topic_[kMaxTopicLen] = "";
   char gateway_topic_[kMaxTopicLen] = "";
   char client_id_[64] = "";
+  bool bemfa_mode_ = false;
+  char bemfa_client_id_[96] = "";
+  char bemfa_topic_gateway_[64] = "";
+  char bemfa_topic_wearable_telemetry_[64] = "";
+  char bemfa_topic_wearable_status_[64] = "";
+  char bemfa_topic_command_[64] = "";
 
   static MqttBridge* s_instance_;
 };

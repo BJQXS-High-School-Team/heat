@@ -1,23 +1,24 @@
-# Dashboard
+﻿# Dashboard
 
-## Entry
+## 入口
 
-- `GET /` 返回轻量单页HTML（轮询 `/api/*`）
+- `GET /` 返回轻量单页 HTML（S3 直出）
 
-## Polling Strategy
+## 刷新策略
 
-- 每 `1000~2000ms` 轮询一次：
-  - `/api/health`
-  - `/api/host`
-  - `/api/devices`
+前端每 1.5s 轮询：
 
-## UI Blocks
+- `/api/health`
+- `/api/host`
+- `/api/devices`
 
-1. 网关状态区
-2. 网关环境区（明确标注 gateway ambient）
-3. 可穿戴设备列表区
+## 页面分区
 
-## Device Card Fields
+1. Gateway Status
+2. Gateway Ambient (Host-Side Only)
+3. Wearables 列表
+
+## 设备卡片字段
 
 - `device_id`
 - `online/offline`
@@ -25,19 +26,21 @@
 - `heart_rate_bpm`
 - `spo2_pct`
 - `body_temp_c`
-- `activity_score`
-- `gps`（fix/satellites/lat/lng）
+- `activity_score` / `activity_level`
+- GPS 概要（fix/satellites/lat/lng）
 - `local_state`
 - `effective_state`
 - `alarm_active`
 
-## Color Rules
+## 色彩规则
 
 - normal: green
 - warning: yellow
 - danger: red
 - offline: gray
 
-## Important Label Requirement
+## 关键标注要求
 
-所有 SHT35/BH1750 数据均使用 `Gateway Ambient` 标题，不得显示为 wearable ambient。
+页面必须明确标注：`Gateway Ambient (Host-Side Only)`。
+
+严禁把 S3 侧 SHT35/BH1750 数据标注成 wearable ambient。

@@ -17,6 +17,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--keepalive", type=int, default=30, help="MQTT keepalive seconds")
     parser.add_argument("--refresh", type=float, default=2.0, help="Monitor refresh seconds")
     parser.add_argument("--raw-log", action="store_true", help="Print raw MQTT messages")
+    parser.add_argument(
+        "--bemfa-mode",
+        action="store_true",
+        help="Use Bemfa topic mode (<topic>/up and <topic>/set)",
+    )
+    parser.add_argument(
+        "--bemfa-topic-gateway",
+        default="heatriskgw004",
+        help="Bemfa gateway telemetry topic",
+    )
+    parser.add_argument(
+        "--bemfa-topic-wearable-telemetry",
+        default="heatriskwb004",
+        help="Bemfa wearable telemetry topic",
+    )
+    parser.add_argument(
+        "--bemfa-topic-wearable-status",
+        default="heatriskst004",
+        help="Bemfa wearable status topic",
+    )
+    parser.add_argument(
+        "--bemfa-topic-command",
+        default="heatriskcmd004",
+        help="Bemfa command topic",
+    )
 
     parser.add_argument(
         "--publish-command",
@@ -47,6 +72,11 @@ def main() -> None:
         password=args.password,
         site_id=args.site_id,
         keepalive_s=args.keepalive,
+        bemfa_mode=args.bemfa_mode,
+        bemfa_topic_gateway=args.bemfa_topic_gateway,
+        bemfa_topic_wearable_telemetry=args.bemfa_topic_wearable_telemetry,
+        bemfa_topic_wearable_status=args.bemfa_topic_wearable_status,
+        bemfa_topic_command=args.bemfa_topic_command,
     )
 
     client = HeatRiskMqttClient(cfg, raw_log=args.raw_log)

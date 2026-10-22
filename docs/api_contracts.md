@@ -1,98 +1,88 @@
-# API Contracts
+﻿# API Contracts
 
-## POST /api/wearable/upload
+## 1) POST /api/wearable/upload
 
-用途：C3 向 S3 上传最新快照。  
-Content-Type: `application/json`
+用途：C3 向 S3 上传最新快照。
 
-### Request (schema_version = 1)
+- Content-Type: `application/json`
+- 请求样例：`docs/sample_payloads/wearable_upload.json`
+- 响应样例：`docs/sample_payloads/api_upload_response.json`
 
-```json
-{
-  "schema_version": 1,
-  "device_id": "wearable-c3-001",
-  "device_type": "wearable",
-  "seq": 123,
-  "device_uptime_ms": 456789,
-  "gps": {
-    "lat": 39.123456,
-    "lng": 116.123456,
-    "has_fix": true,
-    "satellites": 6
-  },
-  "physiology": {
-    "body_temp_c": 36.8,
-    "heart_rate_bpm": 92,
-    "spo2_pct": 97
-  },
-  "motion": {
-    "activity_score": 0.42,
-    "activity_level": "low"
-  },
-  "status": {
-    "local_state": "normal",
-    "effective_state": "normal",
-    "alarm_active": false
-  },
-  "sensor_health": {
-    "gps_ok": true,
-    "temp_ok": true,
-    "max30102_ok": true,
-    "imu_ok": true,
-    "oled_ok": true
-  },
-  "network": {
-    "rssi": -58
-  }
-}
-```
+### 请求关键字段
 
-### Response
+- `schema_version`
+- `device_id`
+- `device_type`（必须为 `wearable`）
+- `seq`、`device_uptime_ms`
+- `gps`、`physiology`、`motion`、`status`、`sensor_health`、`network`
 
-```json
-{
-  "ok": true,
-  "gateway_time_ms": 123456789,
-  "gateway_receive_epoch_ms": 1710000000000,
-  "override": {
-    "enabled": false,
-    "state": "normal",
-    "reason": "",
-    "vibrate": false,
-    "buzzer": false,
-    "expires_in_s": 0
-  }
-}
-```
-
-## GET /api/health
-
-用途：网关基本健康状态。
-
-返回字段建议：
+### 响应关键字段
 
 - `ok`
+- `gateway_time_ms`
+- `gateway_receive_epoch_ms`（当前默认 0，未来可接入 NTP）
+- `override`:
+  - `enabled`
+  - `state`
+  - `reason`
+  - `vibrate`
+  - `buzzer`
+  - `expires_in_s`
+
+## 2) GET /api/health
+
+用途：网关运行健康检查。
+
+样例：`docs/sample_payloads/api_health.json`
+
+关键字段：
+
+- `ok`
+- `uptime_ms`
 - `wifi_connected`
 - `mqtt_connected`
-- `uptime_ms`
 - `heap_free`
+- `device_count`
 
-## GET /api/host
+## 3) GET /api/host
 
-用途：获取网关侧环境数据（非可穿戴侧环境）。
+用途：获取网关侧主机快照（包含 gateway ambient）。
 
-返回字段建议：
+样例：`docs/sample_payloads/api_host.json`
 
-- `gateway_id`
+关键字段：
+
+- `ok`
+- `schema_version`
 - `site_id`
+- `gateway_id`
+- `gateway_time_ms`
 - `gateway_ambient.temperature_c`
 - `gateway_ambient.humidity_pct`
 - `gateway_ambient.light_lux`
+- `sensor_health.sht35_ok`
+- `sensor_health.bh1750_ok`
 
-## GET /api/devices
+## 4) GET /api/devices
 
-用途：获取所有可穿戴设备快照列表。
+用途：获取全部可穿戴快照列表。
 
-## GET /api/device?id=<device_id>
+样例：`docs/sample_payloads/api_devices.json`
 
-用途：获取单个设备快照详情。
+关键字段：
+
+- `ok`
+- `gateway_time_ms`
+- `device_count`
+- `devices[]`
+
+## 5) GET /api/device?id=<device_id>
+
+用途：获取单个设备快照。
+
+样例：`docs/sample_payloads/api_device_ok.json`
+
+关键字段：
+
+- `ok`
+- `device`（字段结构与 `devices[]` 项一致）
